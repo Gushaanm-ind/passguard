@@ -21,7 +21,7 @@ You'll need Python 3.9+.
 
 ```bash
 cd Passguard
-pip install fastapi uvicorn pydantic scikit-learn pandas pywebview
+pip install -r requirements.txt
 ```
 
 Run it in your browser (it opens automatically):
