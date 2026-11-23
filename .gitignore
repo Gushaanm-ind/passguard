@@ -1,0 +1,44 @@
+# ---- macOS ----
+.DS_Store
+**/.DS_Store
+._*
+.AppleDouble
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+
+# ---- Freebuff tooling (internal, not part of the project) ----
+.freebuff/
+
+# ---- Secrets & local config ----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+secrets.json
+credentials.json
+
+# ---- Local scratch / temp ----
+pypractical.py
+*.log
+tmp/
+temp/

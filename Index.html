@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PassGuard — Security Analysis</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #04070f;
+  --surface:   #080d18;
+  --surface2:  #0d1422;
+  --border:    #162030;
+  --border2:   #1e2e44;
+  --text:      #dce8f5;
+  --muted:     #4a6280;
+  --muted2:    #6a82a0;
+  --accent:    #2563eb;
+  --accent-hi: #3b82f6;
+  --weak:      #dc2626;
+  --vstrong:   #059669;
+  --mono:      'Courier New', Courier, monospace;
+  --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Helvetica, Arial, sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Topbar ── */
+.topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+}
+
+.brand {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-sep  { color: var(--border2); }
+.brand-sub  { color: var(--muted2); font-size: 11px; letter-spacing: 0.12em; }
+
+.version-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  border: 1px solid var(--border2);
+  padding: 4px 10px;
+  background: var(--bg);
+}
+
+/* ── Layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  flex: 1;
+}
+
+/* ── Main ── */
+.main {
+  padding: 52px 48px;
+  border-right: 1px solid var(--border);
+}
+
+.col-header {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 36px;
+}
+
+.field-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.field-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.field-hint { font-size: 11px; color: var(--muted); }
+
+.input-wrap {
+  display: flex;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  transition: border-color 0.12s;
+}
+.input-wrap:focus-within {
+  border-color: var(--accent);
+  background: var(--surface2);
+}
+
+.input-wrap input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--text);
+  padding: 16px 18px;
+  letter-spacing: 0.1em;
+  caret-color: var(--accent-hi);
+}
+.input-wrap input::placeholder {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.vis-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s, background 0.12s;
+}
+.vis-btn:hover { color: var(--accent-hi); background: var(--surface2); }
+
+.meter {
+  margin-top: 2px;
+  margin-bottom: 6px;
+  display: flex;
+  gap: 3px;
+}
+.seg {
+  flex: 1;
+  height: 3px;
+  background: var(--border);
+  transition: background 0.25s;
+}
+
+.meter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 44px;
+}
+
+.strength-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  transition: color 0.25s;
+}
+
+.entropy-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.offline-msg {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--weak);
+  padding: 6px 0;
+  display: none;
+}
+.offline-msg.show { display: block; }
+
+#panel { opacity: 0; transition: opacity 0.2s; }
+#panel.visible { opacity: 1; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+.stat-cell {
+  padding: 22px 20px;
+  border-right: 1px solid var(--border);
+}
+.stat-cell:last-child { border-right: none; }
+
+.stat-num {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-num.small { font-size: 16px; padding-top: 5px; }
+
+.stat-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.req-table { width: 100%; border-collapse: collapse; margin-bottom: 36px; }
+.req-table tr { border-bottom: 1px solid var(--border); }
+.req-table tr:last-child { border-bottom: none; }
+.req-table td { padding: 11px 0; vertical-align: middle; }
+
+.req-dot {
+  width: 6px; height: 6px;
+  background: var(--border2);
+  display: inline-block;
+  margin-right: 14px;
+  transition: background 0.2s;
+}
+.req-name   { font-size: 13px; color: var(--muted2); }
+.req-status { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: var(--muted); text-align: right; font-weight: 700; }
+
+.req-table tr.ok .req-dot    { background: var(--vstrong); }
+.req-table tr.ok .req-name   { color: var(--text); }
+.req-table tr.ok .req-status { color: var(--vstrong); }
+
+.rec-item {
+  display: flex;
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+.rec-item:last-child { border-bottom: none; }
+
+.rec-idx  { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--border2); padding-top: 3px; min-width: 18px; }
+.rec-text { font-size: 13px; color: var(--muted2); line-height: 1.55; }
+.rec-text.good { color: var(--vstrong); }
+
+/* ── Sidebar ── */
+.side {
+  background: var(--surface);
+  padding: 52px 28px;
+}
+
+.side-col-header {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 28px;
+}
+
+.charset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.cs-btn {
+  background: var(--surface);
+  border: none;
+  padding: 14px 12px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 0.12s;
+}
+.cs-btn:hover { background: var(--surface2); }
+.cs-btn.on { background: var(--surface2); }
+
+.cs-code { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--muted2); transition: color 0.12s; }
+.cs-btn.on .cs-code { color: var(--accent-hi); }
+.cs-desc { font-size: 10px; color: var(--muted); }
+
+.len-group { margin-bottom: 24px; }
+.len-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.len-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; color: var(--muted); font-weight: 700; }
+.len-val   { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent-hi); }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 1px;
+  background: var(--border2);
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  background: var(--accent-hi);
+  cursor: pointer;
+}
+
+.gen-box {
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  padding: 14px 16px;
+  margin-bottom: 1px;
+  min-height: 60px;
+}
+.gen-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.8;
+}
+
+.btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 1px;
+}
+.btn-grid.full { grid-template-columns: 1fr; margin-bottom: 0; }
+
+.act-btn {
+  background: var(--surface);
+  border: none;
+  padding: 11px 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--muted2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  text-align: center;
+}
+.act-btn:hover { background: var(--surface2); color: var(--text); }
+.act-btn.primary { background: var(--accent); color: #fff; }
+.act-btn.primary:hover { background: var(--accent-hi); }
+
+.toast {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--vstrong);
+  font-weight: 700;
+  text-align: right;
+  padding-top: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.toast.show { opacity: 1; }
+
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+  .main   { padding: 36px 20px; border-right: none; }
+  .side   { padding: 36px 20px; }
+  .topbar { padding: 0 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <path d="M9 1L1.5 4.5V10c0 4 3.2 7.7 7.5 8.8C13.3 17.7 16.5 14 16.5 10V4.5L9 1z"
+            fill="none" stroke="#3b82f6" stroke-width="1.2"/>
+      <path d="M6.5 9.5l2 2 3.5-4" stroke="#3b82f6" stroke-width="1.4"
+            stroke-linecap="square" stroke-linejoin="miter"/>
+    </svg>
+    PASSGUARD
+    <span class="brand-sep">/</span>
+    <span class="brand-sub">Local Security Lab</span>
+  </div>
+  <div class="version-chip">ML v1.0 · LOCAL</div>
+</div>
+
+<div class="layout">
+
+  <div class="main">
+    <div class="col-header">Password Input</div>
+
+    <div class="field-meta">
+      <span class="field-label">Analyze</span>
+      <span class="field-hint">Processed locally — never leaves your device</span>
+    </div>
+    <div class="input-wrap">
+      <input type="password" id="pwdInput" placeholder="Enter password to analyze"
+             autocomplete="off" spellcheck="false"/>
+      <button class="vis-btn" onclick="toggleVis()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="square">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+    </div>
+    <div class="offline-msg" id="offlineMsg">
+      Backend offline — run: python launcher.py
+    </div>
+
+    <div class="meter" id="segs">
+      <div class="seg" id="s0"></div>
+      <div class="seg" id="s1"></div>
+      <div class="seg" id="s2"></div>
+      <div class="seg" id="s3"></div>
+    </div>
+    <div class="meter-footer">
+      <span class="strength-label" id="strengthLabel">Awaiting input</span>
+      <span class="entropy-label"  id="entropyLabel"></span>
+    </div>
+
+    <div id="panel">
+
+      <div class="stat-grid">
+        <div class="stat-cell">
+          <div class="stat-num" id="sLen">—</div>
+          <div class="stat-name">Length</div>
+        </div>
+
+        <div class="stat-cell">
+          <div class="stat-num" id="sEntropy">—</div>
+          <div class="stat-name">Entropy (bits)</div>
+        </div>
+
+        <div class="stat-cell">
+          <div class="stat-num small" id="sSimStatus">—</div>
+          <div class="stat-name">Simulation</div>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:0">Requirements</div>
+      <table class="req-table">
+        <tr id="c0"><td><span class="req-dot"></span></td><td class="req-name">Minimum 12 characters</td>      <td class="req-status">Fail</td></tr>
+        <tr id="c1"><td><span class="req-dot"></span></td><td class="req-name">Uppercase letters</td>          <td class="req-status">Fail</td></tr>
+        <tr id="c2"><td><span class="req-dot"></span></td><td class="req-name">Lowercase letters</td>          <td class="req-status">Fail</td></tr>
+        <tr id="c3"><td><span class="req-dot"></span></td><td class="req-name">Numeric characters</td>         <td class="req-status">Fail</td></tr>
+        <tr id="c4"><td><span class="req-dot"></span></td><td class="req-name">Special symbols</td>            <td class="req-status">Fail</td></tr>
+        <tr id="c5"><td><span class="req-dot"></span></td><td class="req-name">Not in local common-password list</td><td class="req-status">Fail</td></tr>
+      </table>
+
+      <div class="section-label" style="margin-bottom:0">Local Attack Simulation</div>
+
+      <div class="simulation-box">
+        <div class="simulation-header">
+          <span id="simMode">Dictionary + Pattern Simulation</span>
+          <span id="simStatus">READY</span>
+        </div>
+
+        <div class="simulation-terminal" id="simulationTerminal">
+          <div>$ passguard --local-crack</div>
+          <div>$ waiting for password...</div>
+        </div>
+
+        <div style="
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:1px;
+          background:var(--border);
+          border-top:1px solid var(--border);
+        ">
+          <div style="padding:12px 14px;background:var(--bg);">
+            <div class="stat-name">Strategy</div>
+            <div id="simStrategy" style="
+              font-family:var(--mono);
+              font-size:11px;
+              color:var(--text);
+              margin-top:5px;
+            ">—</div>
+          </div>
+
+          <div style="padding:12px 14px;background:var(--bg);">
+            <div class="stat-name">Model confidence</div>
+            <div id="simConfidence" style="
+              font-family:var(--mono);
+              font-size:11px;
+              color:var(--text);
+              margin-top:5px;
+            ">—</div>
+          </div>
+        </div>
+
+        <div class="simulation-footer">
+          <div>
+            <span id="simAttempts">Attempts: 0</span>
+            <span id="simSpeed" style="margin-left:18px;">Speed: —</span>
+          </div>
+          <button class="act-btn primary" id="simulateBtn" onclick="startSimulation()">
+            Run Simulation
+          </button>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:0; margin-top:32px">
+        Recommendations
+      </div>
+      <div id="suggestions"></div>
+
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="side-col-header">Password Generator</div>
+
+    <div class="charset-grid">
+      <button class="cs-btn on" id="pUpper" onclick="toggleCharset(this)">
+        <span class="cs-code">A–Z</span><span class="cs-desc">Uppercase</span>
+      </button>
+      <button class="cs-btn on" id="pLower" onclick="toggleCharset(this)">
+        <span class="cs-code">a–z</span><span class="cs-desc">Lowercase</span>
+      </button>
+      <button class="cs-btn on" id="pDigit" onclick="toggleCharset(this)">
+        <span class="cs-code">0–9</span><span class="cs-desc">Numerals</span>
+      </button>
+      <button class="cs-btn on" id="pSym" onclick="toggleCharset(this)">
+        <span class="cs-code">!@#</span><span class="cs-desc">Symbols</span>
+      </button>
+    </div>
+
+    <div class="len-group">
+      <div class="len-header">
+        <span class="len-label">Length</span>
+        <span class="len-val" id="lenVal">16</span>
+      </div>
+      <input type="range" id="lenSlider" min="8" max="32" value="16"
+             oninput="updateLen(this.value)"/>
+    </div>
+
+    <div class="gen-box">
+      <div class="gen-text" id="genPwd">—</div>
+    </div>
+
+    <div class="btn-grid" style="margin-bottom:1px">
+      <button class="act-btn" onclick="generatePassword()">Regenerate</button>
+      <button class="act-btn" onclick="useGenerated()">Use this</button>
+    </div>
+    <div class="btn-grid full">
+      <button class="act-btn primary" onclick="copyGenerated()">Copy to clipboard</button>
+    </div>
+    <div class="toast" id="toast">Copied</div>
+  </div>
+
+</div>
+
+<script>
+// Always talk to localhost — works when served via FastAPI
+const API = window.location.origin;
+
+let timer, genPwd = '';
+let simulationRunning = false;
+const SEG_COLORS = ['', '#dc2626', '#f97316', '#eab308', '#3b82f6', '#22c55e'];
+
+document.getElementById('pwdInput').addEventListener('input', e => {
+  clearTimeout(timer);
+  timer = setTimeout(() => analyze(e.target.value), 280);
+});
+
+async function analyze(pwd) {
+  if (!pwd) { reset(); return; }
+  try {
+    const r = await fetch(`${API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    const d = await r.json();
+    document.getElementById('offlineMsg').classList.remove('show');
+    render(d);
+  } catch {
+    document.getElementById('offlineMsg').classList.add('show');
+    renderOffline(pwd);
+  }
+}
+
+async function startSimulation() {
+  if (simulationRunning) return;
+
+  const pwd = document.getElementById('pwdInput').value;
+
+  if (!pwd) {
+    return;
+  }
+
+  simulationRunning = true;
+
+  const btn = document.getElementById('simulateBtn');
+  const terminal = document.getElementById('simulationTerminal');
+  const status = document.getElementById('simStatus');
+  const attemptsLabel = document.getElementById('simAttempts');
+  const speedLabel = document.getElementById('simSpeed');
+  const simStatus = document.getElementById('sSimStatus');
+  const strategyLabel = document.getElementById('simStrategy');
+  const confidenceLabel = document.getElementById('simConfidence');
+
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+
+  status.textContent = 'SEARCHING';
+  status.style.color = 'var(--accent-hi)';
+
+  simStatus.textContent = 'RUNNING';
+  simStatus.style.color = 'var(--accent-hi)';
+
+  attemptsLabel.textContent = 'Attempts: 0';
+  speedLabel.textContent = 'Speed: —';
+  strategyLabel.textContent = '—';
+  confidenceLabel.textContent = '—';
+
+  terminal.innerHTML = `
+    <div>$ passguard --local-crack</div>
+    <div>$ target prepared locally</div>
+    <div>$ hashing target...</div>
+    <div>$ starting cracking engine...</div>
+  `;
+
+  try {
+    const r = await fetch(`${API}/crack`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        password: pwd
+      })
+    });
+
+    const responseText = await r.text();
+
+    if (!r.ok) {
+      throw new Error(
+        `Cracking request failed (${r.status}): ${responseText}`
+      );
+    }
+
+    let data;
+
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        `Invalid response from cracking server: ${responseText}`
+      );
+    }
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    strategyLabel.textContent = data.strategy || '—';
+    confidenceLabel.textContent =
+      data.confidence !== undefined
+        ? `${data.confidence}%`
+        : '—';
+
+    attemptsLabel.textContent =
+      `Attempts: ${data.attempts}`;
+
+    speedLabel.textContent =
+      `Speed: ${Number(data.candidates_per_second || 0).toLocaleString()} candidates/sec`;
+
+    terminal.innerHTML = `
+      <div>$ passguard --local-crack</div>
+      <div>$ strategy: ${data.strategy || 'Unknown'}</div>
+      <div>$ model confidence: ${data.confidence ?? '—'}%</div>
+      <div>$ attack engine started...</div>
+    `;
+
+    /*
+     * The current /crack endpoint returns the completed result
+     * rather than streaming every attempt. We therefore render
+     * the known number of attempts as a terminal-style log.
+     */
+    const total = Number(data.attempts || 0);
+    const displayCount = Math.min(total, 100);
+
+    for (let i = 1; i <= displayCount; i++) {
+      const line = document.createElement('div');
+
+      if (data.found && i === total) {
+        line.className = 'match';
+        line.textContent =
+          `[${String(i).padStart(6, '0')}] MATCH FOUND`;
+      } else {
+        line.className = 'attempt';
+        line.textContent =
+          `[${String(i).padStart(6, '0')}] candidate tested`;
+      }
+
+      terminal.appendChild(line);
+    }
+
+    if (total > 100) {
+      const skipped = document.createElement('div');
+      skipped.className = 'attempt';
+      skipped.textContent =
+        `[ ... ] ${total - 100} additional attempts completed`;
+      terminal.appendChild(skipped);
+    }
+
+    terminal.scrollTop = terminal.scrollHeight;
+
+    if (data.found) {
+      status.textContent = 'FOUND';
+      status.style.color = 'var(--vstrong)';
+
+      simStatus.textContent = 'FOUND';
+      simStatus.style.color = 'var(--vstrong)';
+
+      const resultLine = document.createElement('div');
+      resultLine.className = 'match';
+      resultLine.textContent =
+        `[+] PASSWORD RECOVERED AFTER ${total} ATTEMPTS`;
+      terminal.appendChild(resultLine);
+    } else {
+      status.textContent = 'NOT FOUND';
+      status.style.color = 'var(--weak)';
+
+      simStatus.textContent = 'NOT FOUND';
+      simStatus.style.color = 'var(--weak)';
+
+      const resultLine = document.createElement('div');
+      resultLine.className = 'error';
+      resultLine.textContent =
+        `[-] PASSWORD NOT FOUND WITHIN ${total} ATTEMPTS`;
+      terminal.appendChild(resultLine);
+    }
+
+  } catch (error) {
+    terminal.innerHTML += `
+      <div class="error">
+        [ERROR] ${error.message}
+      </div>
+    `;
+
+    status.textContent = 'ERROR';
+    status.style.color = 'var(--weak)';
+
+    simStatus.textContent = 'ERROR';
+    simStatus.style.color = 'var(--weak)';
+
+    attemptsLabel.textContent = 'Attempts: 0';
+    speedLabel.textContent = 'Speed: —';
+
+  } finally {
+    simulationRunning = false;
+    btn.disabled = false;
+    btn.textContent = 'Run Simulation';
+  }
+}
+
+function renderOffline(pwd) {
+  let score = 0;
+  if (pwd.length >= 8)  score++;
+  if (pwd.length >= 12) score++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd) && /[^a-zA-Z0-9]/.test(pwd)) score++;
+  score = Math.min(score, 4);
+  const color = SEG_COLORS[score + 1] || SEG_COLORS[1];
+  const labels = ['Very Weak', 'Weak', 'Average', 'Strong', 'Very Strong'];
+  for (let i = 0; i < 4; i++)
+    document.getElementById('s'+i).style.background = i < score ? color : 'var(--border)';
+  const sl = document.getElementById('strengthLabel');
+  sl.textContent = labels[score] + ' (offline estimate)';
+  sl.style.color = color;
+}
+
+function render(d) {
+  const score = d.score + 1;
+  const color = SEG_COLORS[score];
+  for (let i = 0; i < 4; i++)
+    document.getElementById('s'+i).style.background = i < score ? color : 'var(--border)';
+  const sl = document.getElementById('strengthLabel');
+  sl.textContent = d.label;
+  sl.style.color = color;
+  document.getElementById('entropyLabel').textContent = d.entropy + ' bits';
+  document.getElementById('sLen').textContent    = d.length;
+  document.getElementById('sEntropy').textContent = d.entropy;
+
+  document.getElementById('sSimStatus').textContent = 'READY';
+  document.getElementById('sSimStatus').style.color = 'var(--muted2)';
+
+  const checks = [
+    d.length >= 12,
+    d.has_upper,
+    d.has_lower,
+    d.has_digit,
+    d.has_symbol,
+    !d.is_common
+  ];
+  checks.forEach((ok, i) => {
+    const row = document.getElementById('c'+i);
+    row.classList.toggle('ok', ok);
+    row.querySelector('.req-status').textContent = ok ? 'Pass' : 'Fail';
+  });
+
+  const isGood = d.tips[0].toLowerCase().includes('good') || d.tips[0].toLowerCase().includes('strong');
+  document.getElementById('suggestions').innerHTML = d.tips.map((t, i) => `
+    <div class="rec-item">
+      <span class="rec-idx">${String(i+1).padStart(2,'0')}</span>
+      <span class="rec-text ${isGood ? 'good' : ''}">${t}</span>
+    </div>`).join('');
+  document.getElementById('panel').classList.add('visible');
+}
+
+function reset() {
+  for (let i = 0; i < 4; i++)
+    document.getElementById('s'+i).style.background = 'var(--border)';
+
+  const sl = document.getElementById('strengthLabel');
+  sl.textContent = 'Awaiting input';
+  sl.style.color = 'var(--muted)';
+
+  document.getElementById('entropyLabel').textContent = '';
+
+  document.getElementById('panel').classList.remove('visible');
+  document.getElementById('offlineMsg').classList.remove('show');
+
+  document.getElementById('sSimStatus').textContent = '—';
+  document.getElementById('sSimStatus').style.color = 'var(--text)';
+
+  document.getElementById('simStatus').textContent = 'READY';
+  document.getElementById('simStatus').style.color = 'var(--accent-hi)';
+
+  document.getElementById('simAttempts').textContent = 'Attempts: 0';
+  document.getElementById('simSpeed').textContent = 'Speed: —';
+
+  document.getElementById('simStrategy').textContent = '—';
+  document.getElementById('simConfidence').textContent = '—';
+
+  document.getElementById('simulationTerminal').innerHTML = `
+    <div>$ passguard --local-crack</div>
+    <div>$ waiting for password...</div>
+  `;
+}
+
+function toggleVis() {
+  const inp = document.getElementById('pwdInput');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function toggleCharset(btn) {
+  btn.classList.toggle('on');
+  generatePassword();
+}
+
+function updateLen(v) {
+  document.getElementById('lenVal').textContent = v;
+  generatePassword();
+}
+
+function generatePassword() {
+  const len   = +document.getElementById('lenSlider').value;
+  const upper = document.getElementById('pUpper').classList.contains('on');
+  const lower = document.getElementById('pLower').classList.contains('on');
+  const digit = document.getElementById('pDigit').classList.contains('on');
+  const sym   = document.getElementById('pSym').classList.contains('on');
+  let chars = '';
+  if (upper) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (lower) chars += 'abcdefghijklmnopqrstuvwxyz';
+  if (digit) chars += '0123456789';
+  if (sym)   chars += '!@#$%^&*()_+-=[]{}';
+  if (!chars) chars = 'abcdefghijklmnopqrstuvwxyz';
+  const arr = new Uint32Array(len);
+  crypto.getRandomValues(arr);
+  genPwd = Array.from(arr).map(n => chars[n % chars.length]).join('');
+  document.getElementById('genPwd').textContent = genPwd;
+}
+
+function copyGenerated() {
+  if (!genPwd) return;
+  navigator.clipboard.writeText(genPwd);
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function useGenerated() {
+  if (!genPwd) return;
+  const inp = document.getElementById('pwdInput');
+  inp.value = genPwd;
+  inp.type = 'text';
+  analyze(genPwd);
+}
+
+generatePassword();
+</script>
+</body>
+</html>
